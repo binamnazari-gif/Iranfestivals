@@ -1,0 +1,20 @@
+name: daily-festival
+
+on:
+  schedule:
+    - cron: "30 4 * * *"   # ۰۴:۳۰ UTC = ۰۸:۰۰ صبح تهران
+  workflow_dispatch:        # برای اجرای دستی و تست
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jdatetime requests
+      - run: python bot.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
