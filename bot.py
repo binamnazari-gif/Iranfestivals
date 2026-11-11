@@ -11,6 +11,11 @@ import requests
 TOKEN = os.environ["BOT_TOKEN"]        # توکنی که BotFather داده
 CHANNEL = os.environ["CHANNEL_ID"]     # مثل @my_channel
 
+# آیدی کانال که زیر هر پیام نوشته می‌شود.
+# اگر CHANNEL_ID به شکل @username باشد خودکار همان استفاده می‌شود؛
+# اگر شناسه‌ی عددی بود، Secret اختیاری CHANNEL_HANDLE را بساز (مثلاً @my_channel).
+HANDLE = os.environ.get("CHANNEL_HANDLE") or (CHANNEL if CHANNEL.startswith("@") else "")
+
 MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
           "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"]
 G_MONTHS = ["ژانویه", "فوریه", "مارس", "آوریل", "مه", "ژوئن",
@@ -98,47 +103,54 @@ def matches(item, j, g):
 def split_text(text):
     """
     متن را به سه بخش تقسیم می‌کند:
-      lead   : جمله‌ی اول (خلاصه) برای نقل‌قول
-      points : بقیه‌ی جمله‌ها و بندهای جداشده با «؛» برای بولت
-      notes  : جمله‌های داخل پرانتز (مثل «در شمارش زرتشتی ۱۶ مهر»)
+      lead : جمله‌ی اول (تا اولین «؛» یا نقطه) برای نقل‌قول
+      rest : بقیه‌ی متن، پشت هم و با همان نشانه‌گذاری اصلی، برای یک بولت
+      notes: جمله‌های داخل پرانتز (مثل «در شمارش زرتشتی ۱۶ مهر»)
     """
     sentences = [s.strip() for s in re.split(r"(?<=[.!؟?])\s+", text.strip()) if s.strip()]
     notes = [s[1:-1].strip() for s in sentences if s.startswith("(") and s.endswith(")")]
     body = [s for s in sentences if not (s.startswith("(") and s.endswith(")"))]
     if not body:
-        return "", [], notes
+        return "", "", notes
 
-    first_parts = [p.strip() for p in body[0].rstrip(".").split("؛") if p.strip()]
-    lead = first_parts[0]
-    points = first_parts[1:]
-    for s in body[1:]:
-        points += [p.strip() for p in s.rstrip(".").split("؛") if p.strip()]
-    return lead, points, notes
+    first = body[0]
+    if "؛" in first:
+        lead, tail = first.split("؛", 1)
+        rest_parts = [tail.strip()] + body[1:]
+    else:
+        lead = first
+        rest_parts = body[1:]
+    lead = lead.strip().rstrip(".")
+    rest = " ".join(p for p in rest_parts if p)
+    return lead, rest, notes
 
 
 def format_item(item):
     """یک مناسبت را به متن HTML تلگرام تبدیل می‌کند."""
     esc = lambda s: html.escape(s, quote=False)
-    lead, points, notes = split_text(item["text"])
+    lead, rest, notes = split_text(item["text"])
 
-    lines = [f"🔥 <b>{esc(item['title'])}</b>", ""]
+    lines = [f"🔥 <b>{esc(item['title'])}</b>"]
     if lead:
-        lines += [f"<blockquote>{esc(lead)}</blockquote>", ""]
-    lines += [f"• {esc(p)}" for p in points]
-    if points:
-        lines.append("")
+        lines.append(f"<blockquote>{esc(lead)}</blockquote>")
+    if rest:
+        lines.append(f"• {esc(rest)}")
     lines += [f"🗓 <i>{esc(n)}</i>" for n in notes]
     if item.get("fact"):
-        lines += ["", f"<blockquote>📜 <b>بدانید:</b> {esc(item['fact'])}</blockquote>"]
-    return "\n".join(lines).strip()
+        lines.append(f"<blockquote>📜 <b>بدانید:</b> {esc(item['fact'])}</blockquote>")
+    return "\n".join(lines)
 
 
-def build_message(items, j, g):
+def build_message(items, j, g, handle=""):
     head = (f"📅 <b>{j.day} {MONTHS[j.month - 1]} {j.year}</b>\n"
             f"<i>{g.day} {G_MONTHS[g.month - 1]} {g.year}</i>")
     sep = f"\n\n{DIVIDER}\n\n"
     body = sep.join(format_item(x) for x in items)
-    return to_fa_digits(f"{head}\n{DIVIDER}\n\n{body}")
+    msg = to_fa_digits(f"{head}\n{DIVIDER}\n\n{body}")
+    if handle:
+        # آیدی کانال بعد از تبدیل ارقام اضافه می‌شود تا لینک @username خراب نشود
+        msg += f"\n\n{DIVIDER}\n{html.escape(handle, quote=False)}"
+    return msg
 
 
 def send(text):
@@ -165,5 +177,5 @@ if __name__ == "__main__":
         print("امروز مناسبتی نیست؛ چیزی ارسال نشد.")
         raise SystemExit(0)   # خروج عادی، تا GitHub اجرا را «موفق» ثبت کند
 
-    send(build_message(items, j, g))
+    send(build_message(items, j, g, HANDLE))
     print("ارسال شد.")
