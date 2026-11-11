@@ -18,3 +18,4 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          CHANNEL_HANDLE: ${{ secrets.CHANNEL_HANDLE }}   # اختیاری
